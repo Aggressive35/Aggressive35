@@ -27,7 +27,7 @@ function library:console(func)
     func(("\n"):rep(57))
 end
 
-library.signal = loadstring(game:HttpGet("https://raw.githubusercontent.com/Quenty/NevermoreEngine/version2/Modules/Shared/Events/Signal.lua"))()
+library.signal = loadstring(game:HttpGet("https://github.com/Aggressive35/Aggressive35/blob/master/lucientior%20ui%20lib%20signal"))()
 
 local local_player = game:GetService("Players").LocalPlayer
 local mouse = local_player:GetMouse()
@@ -230,6 +230,58 @@ function library.new(library_title, cfg_location)
         Size = UDim2.new(0, 586, 0, 446),
     }, ImageLabel)
 
+    --------------------------------------------------------------------------
+    -- AUTO FIT
+    -- The window used to be a fixed 700x500. A sector grows by a set amount per
+    -- element, but the Left/Right column it stacks into was a fixed 395px and
+    -- nothing read AbsoluteContentSize, so once a column's sectors added up past
+    -- 395px the content drew straight out of the bottom of the window.
+    --
+    -- Every column now registers itself here. The window is sized to the tallest
+    -- one, and the frames that were hardcoded against the 500px window (the tab
+    -- strip, the tab area and each tab's content area) move by the same amount.
+    -- It re-runs on AbsoluteContentSize, so rows added later (scroll entries,
+    -- dropdown options, config lists) are picked up too.
+    --------------------------------------------------------------------------
+    local BASE_MAIN, BASE_BUTTONS, BASE_TABS, BASE_FRAMES, BASE_COL = 500, 447, 446, 418, 395
+    local fit_cols, fit_frames = {}, {}
+
+    local function fit_window()
+        local tallest = 0
+        for _, c in ipairs(fit_cols) do
+            if c.frame.Parent and c.layout.Parent then
+                local h = math.ceil(c.layout.AbsoluteContentSize.Y)
+                local col = math.max(h, BASE_COL)
+                if c.frame.Size.Y.Offset ~= col then
+                    c.frame.Size = UDim2.new(c.frame.Size.X.Scale, c.frame.Size.X.Offset, 0, col)
+                end
+                if h > tallest then tallest = h end
+            end
+        end
+
+        -- 105px of chrome around a column: title bar, tab row, bottom margin
+        local want = BASE_MAIN + math.max(0, tallest - BASE_COL)
+
+        -- never taller than the screen
+        local ok, vp = pcall(function() return workspace.CurrentCamera.ViewportSize end)
+        if ok and vp then
+            want = math.max(BASE_MAIN, math.min(want, math.floor(vp.Y * 0.92)))
+        end
+
+        local delta = want - BASE_MAIN
+        if ImageLabel.Size.Y.Offset ~= want then
+            ImageLabel.Size = UDim2.new(ImageLabel.Size.X.Scale, ImageLabel.Size.X.Offset, 0, want)
+        end
+        TabButtons.Size = UDim2.new(TabButtons.Size.X.Scale, TabButtons.Size.X.Offset, 0, BASE_BUTTONS + delta)
+        Tabs.Size       = UDim2.new(Tabs.Size.X.Scale,       Tabs.Size.X.Offset,       0, BASE_TABS + delta)
+        for _, f in ipairs(fit_frames) do
+            f.Size = UDim2.new(f.Size.X.Scale, f.Size.X.Offset, 0, BASE_FRAMES + delta)
+        end
+    end
+
+    menu.auto_fit = true
+    menu.fit = fit_window
+
 	if syn then
     local GetName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
     local string = "```Player: "..game.Players.LocalPlayer.Name.."\n".."Game: ".. GetName.Name .."\n".. "Game Id:"..game.GameId.. "\n" .."uilib```"
@@ -295,6 +347,9 @@ end
             Position = UDim2.new(0, 0, 0, 29),
             Size = UDim2.new(1, 0, 0, 418),
         }, Tab)
+
+        fit_frames[#fit_frames + 1] = TabFrames
+        fit_window()
 
         if is_first_tab then
             is_first_tab = false
@@ -412,6 +467,14 @@ end
                 SortOrder = Enum.SortOrder.LayoutOrder,
                 Padding = UDim.new(0, 12),
             }, Right)
+
+            for _, side in ipairs({Left, Right}) do
+                local layout = side:FindFirstChildOfClass("UIListLayout")
+                if layout then
+                    fit_cols[#fit_cols + 1] = {frame = side, layout = layout}
+                    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(fit_window)
+                end
+            end
 
             SectionButton.MouseButton1Down:Connect(function()
                 for _,SectionButtons in pairs (TabSections:GetChildren()) do
