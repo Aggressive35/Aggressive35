@@ -27,7 +27,7 @@ function library:console(func)
     func(("\n"):rep(57))
 end
 
-library.signal = loadstring(game:HttpGet("https://github.com/Aggressive35/Aggressive35/blob/master/lucientior%20ui%20lib%20signal"))()
+library.signal = loadstring(game:HttpGet("https://raw.githubusercontent.com/Aggressive35/Aggressive35/refs/heads/master/lucientior%20ui%20lib%20signal"))()
 
 local local_player = game:GetService("Players").LocalPlayer
 local mouse = local_player:GetMouse()
