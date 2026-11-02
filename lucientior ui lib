@@ -666,14 +666,18 @@ end
                         element:set_value(value, true)
 
                         local has_extra = false
-                        function element:add_keybind(key_default, key_callback)
+                        function element:add_keybind(key_default, key_callback, key_options)
                             local keybind = {}
+                            -- a keybind now drives its toggle: pressing the key flips the checkbox itself.
+                            -- {flip = false} keeps the key and its callback but leaves the checkbox alone,
+                            -- for keybinds that run something other than the toggle (a menu hotkey).
+                            local flip = not (key_options and key_options.flip == false)
 
                             if has_extra then return end
                             has_extra = true
                             local extra_flag = "$"..flag
 
-                            local extra_value = {Key, Type = "Always", Active = true}
+                            local extra_value = {Key, Type = "Toggle", Active = true}
                             key_callback = key_callback or function() end
 
                             local Keybind = library:create("TextButton", {
@@ -811,17 +815,28 @@ end
 										extra_value.Key = nil
 									end
 
-                                    key_callback(extra_value)
+                                    key_callback(extra_value, "bind")
                                     menu.values[tab.tab_num][section_name][sector_name][extra_flag] = extra_value
+                                    -- the other keybinds see this same press. menu.binding stays up until the
+                                    -- end of the frame so none of them act on the key being assigned.
+                                    task.defer(function() menu.binding = false end)
                                 elseif extra_value.Key ~= nil then
                                     local key = input.KeyCode.Name ~= "Unknown" and input.KeyCode.Name or input.UserInputType.Name
-                                    if key == extra_value.Key then
-                                        if extra_value.Type == "Toggle" then
-                                            extra_value.Active = not extra_value.Active
-                                        elseif extra_value.Type == "Hold" then
-                                            extra_value.Active = true
+                                    if key == extra_value.Key and not menu.binding then
+                                        -- the key drives the toggle itself. Hold turns it on while the key is down,
+                                        -- every other type flips it. skipped while typing into a textbox so a bound
+                                        -- letter does not fire from the config name box or from chat.
+                                        if flip and not uis:GetFocusedTextBox() then
+                                            if extra_value.Type == "Hold" then
+                                                if not value.Toggle then element:set_value({Toggle = true}) end
+                                            else
+                                                element:set_value({Toggle = not value.Toggle})
+                                            end
                                         end
-                                        key_callback(extra_value)
+                                        -- Active is no longer the on/off state, the toggle is. it stays true so a
+                                        -- script that still gates on `Toggle and Active` keeps working.
+                                        extra_value.Active = true
+                                        key_callback(extra_value, "press")
                                         menu.values[tab.tab_num][section_name][sector_name][extra_flag] = extra_value
                                     end
                                 end
@@ -831,8 +846,9 @@ end
                                     local key = input.KeyCode.Name ~= "Unknown" and input.KeyCode.Name or input.UserInputType.Name
                                     if key == extra_value.Key then
                                         if extra_value.Type == "Hold" then
-                                            extra_value.Active = false
-                                            key_callback(extra_value)
+                                            if flip and value.Toggle then element:set_value({Toggle = false}) end
+                                            extra_value.Active = true
+                                            key_callback(extra_value, "release")
                                             menu.values[tab.tab_num][section_name][sector_name][extra_flag] = extra_value
                                         end
                                     end
@@ -843,6 +859,7 @@ end
 								if not is_binding then
 									wait()
 									is_binding = true
+									menu.binding = true
 									Keybind.Text = "[ ... ]"
 									Keybind.Size = UDim2.new(0, library:get_text_size("[ ... ]", 14, Enum.Font.Ubuntu, Vector2.new(700, 20)).X + 3,0, 20)
 								end
@@ -856,6 +873,8 @@ end
 
                             function keybind:set_value(new_value, cb)
                                 extra_value = new_value and new_value or extra_value
+                                extra_value.Active = true
+                                if extra_value.Type == nil then extra_value.Type = "Toggle" end
                                 menu.values[tab.tab_num][section_name][sector_name][extra_flag] = extra_value
     
                                 for _,TypeButton2 in next, KeybindFrame:GetChildren() do
